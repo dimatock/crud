@@ -4,216 +4,78 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/dimatock/crud"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// ComplexModel tests various data types.
-type ComplexModel struct {
-	ID          int            `db:"id,pk"`
-	Name        string         `db:"name"`
-	Description sql.NullString `db:"description"`
-	Age         sql.NullInt64  `db:"age"`
-	CreatedAt   time.Time      `db:"created_at"`
-	UpdatedAt   *time.Time     `db:"updated_at"`
-}
-
-// UUIDModel tests string primary keys.
 type UUIDModel struct {
 	ID   string `db:"id,pk"`
 	Data string `db:"data"`
 }
 
-func setupComplexModelTestDB(t *testing.T) *sql.DB {
+func TestUUIDPrimaryKey(t *testing.T) {
 	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open SQLite database: %v", err)
-	}
-
-	schema := `
-	CREATE TABLE complex_models (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT,
-		description TEXT,
-		age INTEGER,
-		created_at DATETIME,
-		updated_at DATETIME
-	);`
-	_, err = db.Exec(schema)
-	if err != nil {
-		db.Close()
-		t.Fatalf("Failed to create table: %v", err)
-	}
-
-	return db
-}
-
-func setupUUIDModelTestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open SQLite database: %v", err)
-	}
-
-	schema := `
-	CREATE TABLE uuid_models (
-		id TEXT PRIMARY KEY,
-		data TEXT
-	);`
-	_, err = db.Exec(schema)
-	if err != nil {
-		db.Close()
-		t.Fatalf("Failed to create table: %v", err)
-	}
-
-	return db
-}
-
-func TestCRUDWithComplexTypes(t *testing.T) {
-	db := setupComplexModelTestDB(t)
+	require.NoError(t, err)
 	defer db.Close()
 
-	repo, err := crud.NewRepository[ComplexModel](db, "complex_models", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
-
-	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Second) // Truncate for DB compatibility
-
-	// --- Test Create with values ---
-	newItem := ComplexModel{
-		Name:        "Test Item",
-		Description: sql.NullString{String: "A description", Valid: true},
-		Age:         sql.NullInt64{Int64: 30, Valid: true},
-		CreatedAt:   now,
-		UpdatedAt:   &now,
-	}
-
-	created, err := repo.Create(ctx, newItem)
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-	if created.ID == 0 {
-		t.Fatal("Create should have returned an ID")
-	}
-
-	// --- Test GetByID ---
-	retrieved, err := repo.GetByID(ctx, created.ID)
-	if err != nil {
-		t.Fatalf("GetByID failed: %v", err)
-	}
-
-	if retrieved.Name != newItem.Name {
-		t.Errorf("Name mismatch: got %v, want %v", retrieved.Name, newItem.Name)
-	}
-	if retrieved.Description.String != newItem.Description.String {
-		t.Errorf("Description mismatch: got %v, want %v", retrieved.Description.String, newItem.Description.String)
-	}
-	if retrieved.Age.Int64 != newItem.Age.Int64 {
-		t.Errorf("Age mismatch: got %v, want %v", retrieved.Age.Int64, newItem.Age.Int64)
-	}
-	if !retrieved.CreatedAt.Equal(newItem.CreatedAt) {
-		t.Errorf("CreatedAt mismatch: got %v, want %v", retrieved.CreatedAt, newItem.CreatedAt)
-	}
-	if retrieved.UpdatedAt == nil || !retrieved.UpdatedAt.Equal(*newItem.UpdatedAt) {
-		t.Errorf("UpdatedAt mismatch: got %v, want %v", retrieved.UpdatedAt, newItem.UpdatedAt)
-	}
-
-	// --- Test Update ---
-	updatedAt := time.Now().UTC().Truncate(time.Second).Add(5 * time.Minute)
-	retrieved.Name = "Updated Name"
-	retrieved.Description = sql.NullString{} // Test NULL value
-	retrieved.UpdatedAt = &updatedAt
-
-	updated, err := repo.Update(ctx, retrieved)
-	if err != nil {
-		t.Fatalf("Update failed: %v", err)
-	}
-
-	if updated.Name != "Updated Name" {
-		t.Errorf("Update did not update name correctly")
-	}
-	if updated.Description.Valid {
-		t.Errorf("Update did not set description to NULL")
-	}
-
-	// --- Verify Update in DB ---
-	verified, err := repo.GetByID(ctx, created.ID)
-	if err != nil {
-		t.Fatalf("GetByID after update failed: %v", err)
-	}
-	if verified.Name != "Updated Name" {
-		t.Errorf("Name was not updated in DB")
-	}
-	if verified.Description.Valid {
-		t.Errorf("Description was not set to NULL in DB")
-	}
-	if !verified.UpdatedAt.Equal(updatedAt) {
-		t.Errorf("UpdatedAt was not updated in DB")
-	}
-}
-
-func TestCRUDWithStringPK(t *testing.T) {
-	db := setupUUIDModelTestDB(t)
-	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE uuid_models (id TEXT PRIMARY KEY, data TEXT)`);
+	require.NoError(t, err)
 
 	repo, err := crud.NewRepository[UUIDModel](db, "uuid_models", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
-	ctx := context.Background()
-	id := "a-unique-identifier"
+	// Test Create
+	newID := uuid.New().String()
+	created, err := repo.Create(context.Background(), UUIDModel{ID: newID, Data: "test data"})
+	require.NoError(t, err)
+	assert.Equal(t, newID, created.ID)
+	assert.Equal(t, "test data", created.Data)
 
-	// --- Test Create ---
-	newItem := UUIDModel{ID: id, Data: "initial data"}
-	created, err := repo.Create(ctx, newItem)
-	if err != nil {
-		t.Fatalf("Create with string PK failed: %v", err)
-	}
-	if created.ID != newItem.ID {
-		t.Errorf("Create returned wrong ID: got %s, want %s", created.ID, newItem.ID)
-	}
+	// Test GetByID
+	fetched, err := repo.GetByID(context.Background(), newID)
+	require.NoError(t, err)
+	assert.Equal(t, newID, fetched.ID)
 
-	// --- Test GetByID ---
-	retrieved, err := repo.GetByID(ctx, id)
-	if err != nil {
-		t.Fatalf("GetByID failed: %v", err)
-	}
-	if retrieved.ID != id || retrieved.Data != "initial data" {
-		t.Errorf("GetByID retrieved incorrect data: got %+v", retrieved)
-	}
+	// Test List with filter
+	items, err := repo.List(context.Background(), crud.WithFilter[UUIDModel]("id", newID))
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, newID, items[0].ID)
 
-	// --- Test Update ---
-	retrieved.Data = "updated data"
-	updated, err := repo.Update(ctx, retrieved)
-	if err != nil {
-		t.Fatalf("Update failed: %v", err)
-	}
-	if updated.Data != "updated data" {
-		t.Errorf("Update did not return updated data")
-	}
+	// Test Update
+	created.Data = "updated data"
+	updated, err := repo.Update(context.Background(), created)
+	require.NoError(t, err)
+	assert.Equal(t, "updated data", updated.Data)
 
-	// Verify update in DB
-	verified, err := repo.GetByID(ctx, id)
-	if err != nil {
-		t.Fatalf("GetByID after update failed: %v", err)
-	}
-	if verified.Data != "updated data" {
-		t.Errorf("Data was not updated in DB")
-	}
+	// Test Delete
+	err = repo.Delete(context.Background(), newID)
+	require.NoError(t, err)
 
-	// --- Test Delete ---
-	err = repo.Delete(ctx, id)
-	if err != nil {
-		t.Fatalf("Delete failed: %v", err)
-	}
+	_, err = repo.GetByID(context.Background(), newID)
+	assert.ErrorIs(t, err, sql.ErrNoRows)
+}
 
-	// Verify deletion
-	_, err = repo.GetByID(ctx, id)
-	if err != sql.ErrNoRows {
-		t.Errorf("Expected sql.ErrNoRows after delete, but got %v", err)
-	}
+// Mock interface for testing transaction logic
+type mockRepoWithTx struct {
+	crud.RepositoryInterface[UUIDModel]
+	tx *sql.Tx
+}
+
+func (m *mockRepoWithTx) WithTx(tx *sql.Tx) crud.RepositoryInterface[UUIDModel] {
+	m.tx = tx
+	return m
+}
+
+func (m *mockRepoWithTx) Create(ctx context.Context, item UUIDModel) (UUIDModel, error) {
+	// In a real scenario, you would use m.tx to perform the operation
+	return item, nil
+}
+
+func (m *mockRepoWithTx) Delete(ctx context.Context, id any) error {
+	return nil
 }

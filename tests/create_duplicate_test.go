@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dimatock/crud"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateDuplicateUser(t *testing.T) {
@@ -12,9 +13,7 @@ func TestCreateDuplicateUser(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err, "Failed to create repository")
 
 	ctx := context.Background()
 
@@ -25,9 +24,7 @@ func TestCreateDuplicateUser(t *testing.T) {
 	}
 
 	_, err = repo.Create(ctx, newUser)
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
+	require.NoError(t, err, "Create failed")
 
 	// Try to create another user with the same username
 	duplicateUser := User{
@@ -36,7 +33,5 @@ func TestCreateDuplicateUser(t *testing.T) {
 	}
 
 	_, err = repo.Create(ctx, duplicateUser)
-	if err == nil {
-		t.Errorf("Expected an error when creating a user with a duplicate username, but got nil")
-	}
+	require.Error(t, err, "Expected an error when creating a user with a duplicate username")
 }

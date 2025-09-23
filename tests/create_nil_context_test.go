@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dimatock/crud"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateWithNilContext(t *testing.T) {
@@ -12,9 +13,7 @@ func TestCreateWithNilContext(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err, "Failed to create repository")
 
 	newUser := User{
 		Username: "testuser",
@@ -26,7 +25,5 @@ func TestCreateWithNilContext(t *testing.T) {
 	// while others might deadlock. Instead, we follow the linter's advice and
 	// use context.TODO() when we don't have a specific context to pass.
 	_, err = repo.Create(context.TODO(), newUser)
-	if err != nil {
-		t.Errorf("Expected no error when creating a user with context.TODO(), but got %v", err)
-	}
+	require.NoError(t, err, "Expected no error when creating a user with context.TODO()")
 }

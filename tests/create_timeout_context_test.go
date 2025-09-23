@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dimatock/crud"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateWithTimeoutContext(t *testing.T) {
@@ -13,9 +14,7 @@ func TestCreateWithTimeoutContext(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err, "Failed to create repository")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 	defer cancel()
@@ -26,7 +25,5 @@ func TestCreateWithTimeoutContext(t *testing.T) {
 	}
 
 	_, err = repo.Create(ctx, newUser)
-	if err == nil {
-		t.Errorf("Expected an error when creating a user with a timeout context, but got nil")
-	}
+	require.Error(t, err, "Expected an error when creating a user with a timeout context")
 }

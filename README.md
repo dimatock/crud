@@ -9,6 +9,7 @@ simplifies database interactions by abstracting away repetitive SQL code.
 ## Features
 
 - **Generic:** Works with any Go struct.
+- **Type-Safe Eager Loading:** Load relationships (`Belongs To`, `Has Many`, `Has One`) without N+1 problems, using a type-safe, interface-based API.
 - **Flexible Primary Keys:** Supports both auto-incrementing integers and user-provided keys (e.g., UUIDs).
 - **Upsert Operation:** Provides a `CreateOrUpdate` method for `INSERT ... ON CONFLICT` semantics.
 - **ACID Transactions:** All operations can be performed within a database transaction for data consistency.
@@ -91,7 +92,7 @@ user1 := User{ID: 10, Username: "new-user", Email: "new@example.com"}
 finalUser1, err := userRepo.CreateOrUpdate(ctx, user1)
 
 // Now, let's update the user's email. Because ID 10 already exists,
-// the existing record will be updated.
+the existing record will be updated.
 user1.Email = "updated@example.com"
 finalUser1, err = userRepo.CreateOrUpdate(ctx, user1)
 
@@ -115,8 +116,8 @@ err = userRepo.Delete(ctx, 1)
 
 // List with basic options
 users, err := userRepo.List(ctx,
-    crud.WithFilter("username", "johndoe"),
-    crud.WithSort("id", crud.SortDesc),
+    crud.WithFilter[User]("username", "johndoe"),
+    crud.WithSort[User]("id", crud.SortDesc),
 )
 ```
 
@@ -127,18 +128,159 @@ Combine multiple options to build complex queries.
 ```go
 // Find all users named "user1" or "user3"
 users, err := userRepo.List(ctx,
-    crud.WithIn("username", "user1", "user3"),
+    crud.WithIn[User]("username", "user1", "user3"),
 )
 
 // Find all products whose names start with "Awesome"
 products, err := productRepo.List(ctx,
-    crud.WithLike("name", "Awesome%"),
+    crud.WithLike[Product]("name", "Awesome%"),
 )
 
 // Find all users with an ID greater than 5
 users, err = userRepo.List(ctx,
-    crud.WithOperator("id", ">", 5),
+    crud.WithOperator[User]("id", ">", 5),
 )
+```
+
+## Eager Loading with `With()`
+
+The library supports type-safe eager loading of relationships to prevent N+1 query problems. This is achieved by passing a `mapper` object that implements the `crud.Relation[T]` interface to the `crud.With()` option.
+
+The library provides three pre-built mapper structs for common relationship types:
+- `ManyToOneMapper` (for Belongs To relationships)
+- `OneToManyMapper` (for Has Many relationships)
+- `HasOneMapper` (for Has One relationships)
+
+### `ManyToOneMapper` (Belongs To)
+
+Use this when your model has a field for a single parent, and its table contains the foreign key.
+
+**Example:** A `Post` belongs to a `User`. We want to load the `User` for each `Post`.
+
+```go
+// 1. Define models
+type Post struct {
+	ID     int     `db:"id,pk"`
+	UserID int     `db:"user_id"`
+	Title  string  `db:"title"`
+	User   *User `db:"-"` // Target field to populate
+}
+
+type User struct {
+	ID   int    `db:"id,pk"`
+	Name string `db:"name"`
+}
+
+// 2. Define repositories
+postRepo, _ := crud.NewRepository[Post](db, "posts", dialect)
+userRepo, _ := crud.NewRepository[User](db, "users", dialect)
+
+// 3. Define the mapper
+mapper := crud.ManyToOneMapper[Post, User, int]{
+	Fetcher: func(ctx context.Context, userIDs []int) ([]User, error) {
+		// Use the userRepo to fetch all users by their IDs in a single query
+		return userRepo.List(ctx, crud.WithIn[User]("id", crud.IntsToAnys(userIDs)...))
+	},
+	GetFK:      func(p *Post) int { return p.UserID }, // Get the foreign key from the Post
+	GetPK:      func(u *User) int { return u.ID },     // Get the primary key from the User
+	SetRelated: func(p *Post, u *User) { p.User = u }, // Set the loaded User on the Post
+}
+
+// 4. Execute the query
+posts, err := postRepo.List(ctx, crud.With[Post](mapper))
+
+// The `posts` slice will now have the `User` field populated for each post.
+```
+
+### `OneToManyMapper` (Has Many)
+
+Use this when your model has a slice field for multiple related children.
+
+**Example:** A `User` has many `Post`s. We want to load all `Posts` for each `User`.
+
+```go
+// 1. Define models
+type User struct {
+	ID    int      `db:"id,pk"`
+	Name  string   `db:"name"`
+	Posts []*Post `db:"-"` // Target field to populate
+}
+
+type Post struct {
+	ID     int    `db:"id,pk"`
+	UserID int    `db:"user_id"`
+	Title  string `db:"title"`
+}
+
+// 2. Define repositories (userRepo, postRepo)
+
+// 3. Define the mapper
+mapper := crud.OneToManyMapper[User, Post, int]{
+	Fetcher: func(ctx context.Context, userIDs []int) ([]Post, error) {
+		return postRepo.List(ctx, crud.WithIn[Post]("user_id", crud.IntsToAnys(userIDs)...))
+	},
+	GetPK:      func(u *User) int { return u.ID },         // Get the primary key from the User
+	GetFK:      func(p *Post) int { return p.UserID },     // Get the foreign key from the Post
+	SetRelated: func(u *User, p []*Post) { u.Posts = p }, // Set the slice of Posts on the User
+}
+
+// 4. Execute the query
+users, err := userRepo.List(ctx, crud.With[User](mapper))
+
+// The `users` slice will now have the `Posts` field populated for each user.
+```
+
+### `HasOneMapper` (Has One)
+
+Use this for a one-to-one relationship where the *other* model's table contains the foreign key.
+
+**Example:** A `User` has one `Profile`.
+
+```go
+// 1. Define models
+type User struct {
+	ID      int        `db:"id,pk"`
+	Name    string     `db:"name"`
+	Profile *Profile `db:"-"` // Target field to populate
+}
+
+type Profile struct {
+	ID     int    `db:"id,pk"`
+	UserID int    `db:"user_id"` // Foreign key is here
+	Bio    string `db:"bio"`
+}
+
+// 2. Define repositories (userRepo, profileRepo)
+
+// 3. Define the mapper
+mapper := crud.HasOneMapper[User, Profile, int]{
+	Fetcher: func(ctx context.Context, userIDs []int) ([]Profile, error) {
+		return profileRepo.List(ctx, crud.WithIn[Profile]("user_id", crud.IntsToAnys(userIDs)...))
+	},
+	GetPK:      func(u *User) int { return u.ID },           // Get the primary key from the User
+	GetFK:      func(p *Profile) int { return p.UserID },     // Get the foreign key from the Profile
+	SetRelated: func(u *User, p *Profile) { u.Profile = p }, // Set the loaded Profile on the User
+}
+
+// 4. Execute the query
+users, err := userRepo.List(ctx, crud.With[User](mapper))
+
+// The `users` slice will now have the `Profile` field populated where it exists.
+```
+
+### Combining Relations
+
+You can load multiple relationships in a single query by passing multiple `With()` options. The library will optimize the fetching process.
+
+```go
+// Assume userToPostsMapper and userToProfileMapper are defined
+
+user, err := userRepo.GetByID(ctx, 1,
+    crud.With[User](userToPostsMapper),
+    crud.With[User](userToProfileMapper),
+)
+
+// The returned user will have both Posts and Profile populated.
 ```
 
 ## Using Transactions
@@ -178,7 +320,7 @@ The `WithLock` option accepts a raw string, allowing you to use dialect-specific
 
 // 1. Select a user and lock the row
 // The query will be SELECT ... FROM users WHERE id = ? FOR UPDATE
-user, err := txRepo.GetByID(ctx, 1, crud.WithLock("FOR UPDATE"))
+user, err := txRepo.GetByID(ctx, 1, crud.WithLock[User]("FOR UPDATE"))
 if err != nil {
     tx.Rollback()
     // ... handle error
@@ -240,8 +382,8 @@ func (r *userRepository) GetByEmail(
 ) (User, error) {
     // Use the List method from the embedded repository with a filter
     users, err := r.List(ctx,
-        crud.WithFilter("email", email),
-        crud.WithLimit(1),
+        crud.WithFilter[User]("email", email),
+        crud.WithLimit[User](1),
     )
     if err != nil {
         return User{}, err
@@ -276,8 +418,8 @@ additional configuration:
 go test ./...
 ```
 
-The integration tests run against a real MySQL database. To run them, you must
-provide a Data Source Name (DSN) via the `MYSQL_DSN` environment variable.
+The integration tests run against a real MySQL or PostgreSQL database. To run them, you must
+provide a Data Source Name (DSN) via the `MYSQL_DSN` or `POSTGRES_DSN` environment variable.
 These tests will be skipped if the variable is not set.
 
 **Example:**

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dimatock/crud"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateWithCanceledContext(t *testing.T) {
@@ -12,9 +13,7 @@ func TestCreateWithCanceledContext(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err, "Failed to create repository")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -25,7 +24,5 @@ func TestCreateWithCanceledContext(t *testing.T) {
 	}
 
 	_, err = repo.Create(ctx, newUser)
-	if err == nil {
-		t.Errorf("Expected an error when creating a user with a canceled context, but got nil")
-	}
+	require.Error(t, err, "Expected an error when creating a user with a canceled context")
 }

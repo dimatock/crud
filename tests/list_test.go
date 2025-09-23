@@ -6,6 +6,8 @@ import (
 
 	"github.com/dimatock/crud"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListUsers(t *testing.T) {
@@ -13,31 +15,20 @@ func TestListUsers(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert some users for testing
 	_, err = repo.Create(ctx, User{Username: "user1", Email: "user1@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user1: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user2", Email: "user2@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user2: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Test listing all users
 	users, err := repo.List(ctx)
-	if err != nil {
-		t.Fatalf("List failed: %v", err)
-	}
-
-	if len(users) != 2 {
-		t.Errorf("Expected 2 users, got %d", len(users))
-	}
+	require.NoError(t, err)
+	assert.Len(t, users, 2)
 }
 
 func TestListWithFilter(t *testing.T) {
@@ -45,34 +36,22 @@ func TestListWithFilter(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert some users for testing
 	_, err = repo.Create(ctx, User{Username: "user1", Email: "user1@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user1: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user2", Email: "user2@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user2: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Test listing with a filter
-	users, err := repo.List(ctx, crud.WithFilter("username", "user1"))
-	if err != nil {
-		t.Fatalf("List with filter failed: %v", err)
-	}
+	users, err := repo.List(ctx, crud.WithFilter[User]("username", "user1"))
+	require.NoError(t, err)
 
-	if len(users) != 1 {
-		t.Errorf("Expected 1 user, got %d", len(users))
-	}
-	if users[0].Username != "user1" {
-		t.Errorf("Expected user1, got %s", users[0].Username)
-	}
+	require.Len(t, users, 1)
+	assert.Equal(t, "user1", users[0].Username)
 }
 
 func TestListWithWhere(t *testing.T) {
@@ -80,35 +59,22 @@ func TestListWithWhere(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert some users for testing
 	_, err = repo.Create(ctx, User{Username: "user1", Email: "user1@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user1: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user2", Email: "user2@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user2: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user3", Email: "user3@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user3: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Test listing with a WHERE clause (OR condition)
-	users, err := repo.List(ctx, crud.WithWhere("username = ? OR username = ?", "user1", "user3"))
-	if err != nil {
-		t.Fatalf("List with where failed: %v", err)
-	}
-
-	if len(users) != 2 {
-		t.Errorf("Expected 2 users, got %d", len(users))
-	}
+	users, err := repo.List(ctx, crud.WithWhere[User]("username = ? OR username = ?", "user1", "user3"))
+	require.NoError(t, err)
+	assert.Len(t, users, 2)
 }
 
 func TestListWithSort(t *testing.T) {
@@ -116,37 +82,23 @@ func TestListWithSort(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert some users for testing
 	_, err = repo.Create(ctx, User{Username: "user2", Email: "user2@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user2: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user1", Email: "user1@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user1: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Test listing with sort
-	users, err := repo.List(ctx, crud.WithSort("username", crud.SortAsc))
-	if err != nil {
-		t.Fatalf("List with sort failed: %v", err)
-	}
+	users, err := repo.List(ctx, crud.WithSort[User]("username", crud.SortAsc))
+	require.NoError(t, err)
 
-	if len(users) != 2 {
-		t.Errorf("Expected 2 users, got %d", len(users))
-	}
-	if users[0].Username != "user1" {
-		t.Errorf("Expected user1 as first user, got %s", users[0].Username)
-	}
-	if users[1].Username != "user2" {
-		t.Errorf("Expected user2 as second user, got %s", users[1].Username)
-	}
+	require.Len(t, users, 2)
+	assert.Equal(t, "user1", users[0].Username)
+	assert.Equal(t, "user2", users[1].Username)
 }
 
 func TestListWithLimitAndOffset(t *testing.T) {
@@ -154,36 +106,22 @@ func TestListWithLimitAndOffset(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert some users for testing
 	_, err = repo.Create(ctx, User{Username: "user1", Email: "user1@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user1: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user2", Email: "user2@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user2: %v", err)
-	}
+	require.NoError(t, err)
 	_, err = repo.Create(ctx, User{Username: "user3", Email: "user3@example.com"})
-	if err != nil {
-		t.Fatalf("Failed to create user3: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Test listing with limit and offset
-	users, err := repo.List(ctx, crud.WithLimit(1), crud.WithOffset(1), crud.WithSort("username", crud.SortAsc))
-	if err != nil {
-		t.Fatalf("List with limit and offset failed: %v", err)
-	}
+	users, err := repo.List(ctx, crud.WithLimit[User](1), crud.WithOffset[User](1), crud.WithSort[User]("username", crud.SortAsc))
+	require.NoError(t, err)
 
-	if len(users) != 1 {
-		t.Errorf("Expected 1 user, got %d", len(users))
-	}
-	if users[0].Username != "user2" {
-		t.Errorf("Expected user2, got %s", users[0].Username)
-	}
+	require.Len(t, users, 1)
+	assert.Equal(t, "user2", users[0].Username)
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/dimatock/crud"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewRepository_MultiplePK(t *testing.T) {
@@ -15,20 +17,12 @@ func TestNewRepository_MultiplePK(t *testing.T) {
 	}
 
 	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open SQLite database: %v", err)
-	}
+	require.NoError(t, err, "Failed to open SQLite database")
 	defer db.Close()
 
 	_, err = crud.NewRepository[UserWithMultiplePK](db, "users", crud.SQLiteDialect{})
-	if err == nil {
-		t.Fatal("Expected an error when creating a repository for a struct with multiple primary keys, but got nil")
-	}
-
-	expectedError := "multiple primary key fields defined in UserWithMultiplePK"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
-	}
+	require.Error(t, err, "Expected an error when creating a repository for a struct with multiple primary keys")
+	assert.Equal(t, "multiple primary key fields defined in UserWithMultiplePK", err.Error())
 }
 
 func TestNewRepository_NoDBTags(t *testing.T) {
@@ -38,20 +32,12 @@ func TestNewRepository_NoDBTags(t *testing.T) {
 	}
 
 	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open SQLite database: %v", err)
-	}
+	require.NoError(t, err, "Failed to open SQLite database")
 	defer db.Close()
 
 	_, err = crud.NewRepository[UserWithNoDBTags](db, "users", crud.SQLiteDialect{})
-	if err == nil {
-		t.Fatal("Expected an error when creating a repository for a struct with no 'db' tags, but got nil")
-	}
-
-	expectedError := "no 'db' tags found in struct UserWithNoDBTags"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
-	}
+	require.Error(t, err, "Expected an error when creating a repository for a struct with no 'db' tags")
+	assert.Equal(t, "no 'db' tags found in struct UserWithNoDBTags", err.Error())
 }
 
 func TestNewRepository_NoPK(t *testing.T) {
@@ -60,36 +46,20 @@ func TestNewRepository_NoPK(t *testing.T) {
 	}
 
 	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open SQLite database: %v", err)
-	}
+	require.NoError(t, err, "Failed to open SQLite database")
 	defer db.Close()
 
 	_, err = crud.NewRepository[UserWithNoPK](db, "users", crud.SQLiteDialect{})
-	if err == nil {
-		t.Fatal("Expected an error when creating a repository for a struct with no primary key, but got nil")
-	}
-
-	expectedError := "no primary key field defined with ',pk' tag in struct UserWithNoPK"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
-	}
+	require.Error(t, err, "Expected an error when creating a repository for a struct with no primary key")
+	assert.Equal(t, "no primary key field defined with ',pk' tag in struct UserWithNoPK", err.Error())
 }
 
 func TestNewRepository_NonStruct(t *testing.T) {
 	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open SQLite database: %v", err)
-	}
+	require.NoError(t, err, "Failed to open SQLite database")
 	defer db.Close()
 
 	_, err = crud.NewRepository[int](db, "users", crud.SQLiteDialect{})
-	if err == nil {
-		t.Fatal("Expected an error when creating a repository for a non-struct type, but got nil")
-	}
-
-	expectedError := "generic type T must be a struct, but got int"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
-	}
+	require.Error(t, err, "Expected an error when creating a repository for a non-struct type")
+	assert.Equal(t, "generic type T must be a struct, but got int", err.Error())
 }

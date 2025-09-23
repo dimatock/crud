@@ -1,17 +1,18 @@
 package crud
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
 // Option configures a query.
-type Option interface {
-	apply(qb *queryBuilder) error
+type Option[T any] interface {
+	apply(qb *queryBuilder[T]) error
 }
 
-// queryBuilder is an internal helper to construct SQL queries.
-type queryBuilder struct {
+// queryBuilder is an internal helper to construct SQL queries and hold relation-loading info.
+type queryBuilder[T any] struct {
 	dialect        Dialect // Reference to the dialect for placeholder generation
 	whereClauses   []string
 	joinClauses    []string
@@ -20,50 +21,51 @@ type queryBuilder struct {
 	limit          int
 	offset         int
 	args           []any
+	relations      []Relation[T] // Holds relationship loading configurations
 }
 
 // --- Filter Option ---
-type filterOption struct {
+type filterOption[T any] struct {
 	column string
 	value  any
 }
 
-func (o filterOption) apply(qb *queryBuilder) error {
+func (o filterOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, fmt.Sprintf("%s = %s", o.column, qb.dialect.Placeholder(len(qb.args)+1)))
 	qb.args = append(qb.args, o.value)
 	return nil
 }
 
 // WithFilter adds a simple WHERE clause to the query (e.g., WHERE column = value).
-func WithFilter(column string, value any) Option {
-	return filterOption{column: column, value: value}
+func WithFilter[T any](column string, value any) Option[T] {
+	return filterOption[T]{column: column, value: value}
 }
 
 // --- Operator Option ---
-type operatorOption struct {
+type operatorOption[T any] struct {
 	column   string
 	operator string
 	value    any
 }
 
-func (o operatorOption) apply(qb *queryBuilder) error {
+func (o operatorOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, fmt.Sprintf("%s %s %s", o.column, o.operator, qb.dialect.Placeholder(len(qb.args)+1)))
 	qb.args = append(qb.args, o.value)
 	return nil
 }
 
 // WithOperator adds a WHERE clause with a custom operator (e.g., WHERE column > value).
-func WithOperator(column, operator string, value any) Option {
-	return operatorOption{column: column, operator: operator, value: value}
+func WithOperator[T any](column, operator string, value any) Option[T] {
+	return operatorOption[T]{column: column, operator: operator, value: value}
 }
 
 // --- In Option ---
-type inOption struct {
+type inOption[T any] struct {
 	column string
 	values []any
 }
 
-func (o inOption) apply(qb *queryBuilder) error {
+func (o inOption[T]) apply(qb *queryBuilder[T]) error {
 	if len(o.values) == 0 {
 		return fmt.Errorf("WithIn option requires at least one value for column '%s'", o.column)
 	}
@@ -77,131 +79,131 @@ func (o inOption) apply(qb *queryBuilder) error {
 }
 
 // WithIn adds a WHERE IN clause to the query.
-func WithIn(column string, values ...any) Option {
-	return inOption{column: column, values: values}
+func WithIn[T any](column string, values ...any) Option[T] {
+	return inOption[T]{column: column, values: values}
 }
 
 // --- Like Option ---
-type likeOption struct {
+type likeOption[T any] struct {
 	column string
 	value  any
 }
 
-func (o likeOption) apply(qb *queryBuilder) error {
+func (o likeOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, fmt.Sprintf("%s LIKE %s", o.column, qb.dialect.Placeholder(len(qb.args)+1)))
 	qb.args = append(qb.args, o.value)
 	return nil
 }
 
 // WithLike adds a WHERE LIKE clause to the query.
-func WithLike(column string, value any) Option {
-	return likeOption{column: column, value: value}
+func WithLike[T any](column string, value any) Option[T] {
+	return likeOption[T]{column: column, value: value}
 }
 
 // --- Lock Option ---
-type lockOption struct {
+type lockOption[T any] struct {
 	clause string
 }
 
-func (o lockOption) apply(qb *queryBuilder) error {
+func (o lockOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.lockClause = o.clause
 	return nil
 }
 
 // WithLock adds a row-locking clause to the query (e.g., "FOR UPDATE").
 // This should only be used within a transaction.
-func WithLock(clause string) Option {
-	return lockOption{clause: clause}
+func WithLock[T any](clause string) Option[T] {
+	return lockOption[T]{clause: clause}
 }
 
 // --- Sort Option ---
-type sortOption struct {
+type sortOption[T any] struct {
 	column    string
 	direction SortDirection
 }
 
-func (o sortOption) apply(qb *queryBuilder) error {
+func (o sortOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.orderByClauses = append(qb.orderByClauses, fmt.Sprintf("%s %s", o.column, o.direction))
 	return nil
 }
 
 // WithSort adds an ORDER BY clause to the query.
-func WithSort(column string, direction SortDirection) Option {
-	return sortOption{column: column, direction: direction}
+func WithSort[T any](column string, direction SortDirection) Option[T] {
+	return sortOption[T]{column: column, direction: direction}
 }
 
 // --- Limit Option ---
-type limitOption struct {
+type limitOption[T any] struct {
 	limit int
 }
 
-func (o limitOption) apply(qb *queryBuilder) error {
+func (o limitOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.limit = o.limit
 	return nil
 }
 
 // WithLimit adds a LIMIT clause to the query.
-func WithLimit(limit int) Option {
-	return limitOption{limit: limit}
+func WithLimit[T any](limit int) Option[T] {
+	return limitOption[T]{limit: limit}
 }
 
 // --- Offset Option ---
-type offsetOption struct {
+type offsetOption[T any] struct {
 	offset int
 }
 
-func (o offsetOption) apply(qb *queryBuilder) error {
+func (o offsetOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.offset = o.offset
 	return nil
 }
 
 // WithOffset adds an OFFSET clause to the query.
-func WithOffset(offset int) Option {
-	return offsetOption{offset: offset}
+func WithOffset[T any](offset int) Option[T] {
+	return offsetOption[T]{offset: offset}
 }
 
 // --- Join Option ---
-type joinOption struct {
+type joinOption[T any] struct {
 	joinClause string
 }
 
-func (o joinOption) apply(qb *queryBuilder) error {
+func (o joinOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.joinClauses = append(qb.joinClauses, o.joinClause)
 	return nil
 }
 
 // WithJoin adds a JOIN clause to the query (e.g., "INNER JOIN roles ON roles.id = users.role_id").
 // IMPORTANT: When using joins, ensure column names in WithFilter and WithSort are fully qualified (e.g., "users.name").
-func WithJoin(joinClause string) Option {
-	return joinOption{joinClause: joinClause}
+func WithJoin[T any](joinClause string) Option[T] {
+	return joinOption[T]{joinClause: joinClause}
 }
 
 // --- Subquery Option ---
-type subqueryOption struct {
+type subqueryOption[T any] struct {
 	column   string
 	operator string
 	subquery string
 	args     []any
 }
 
-func (o subqueryOption) apply(qb *queryBuilder) error {
+func (o subqueryOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, fmt.Sprintf("%s %s (%s)", o.column, o.operator, o.subquery))
 	qb.args = append(qb.args, o.args...)
 	return nil
 }
 
 // WithSubquery adds a subquery clause (e.g., "id IN (SELECT user_id FROM ...)").
-func WithSubquery(column, operator, subquery string, args ...any) Option {
-	return subqueryOption{column: column, operator: operator, subquery: subquery, args: args}
+func WithSubquery[T any](column, operator, subquery string, args ...any) Option[T] {
+	return subqueryOption[T]{column: column, operator: operator, subquery: subquery, args: args}
 }
 
 // --- Where Option ---
-type whereOption struct {
+type whereOption[T any] struct {
 	clause string
 	args   []any
 }
 
-func (o whereOption) apply(qb *queryBuilder) error {
+func (o whereOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, o.clause)
 	qb.args = append(qb.args, o.args...)
 	return nil
@@ -210,6 +212,30 @@ func (o whereOption) apply(qb *queryBuilder) error {
 // WithWhere adds a raw SQL WHERE clause. The user is responsible for writing the correct SQL and providing the correct arguments.
 // The placeholders must match the dialect.
 // Example: WithWhere("name = ? OR email = ?", "John", "john@example.com")
-func WithWhere(clause string, args ...any) Option {
-	return whereOption{clause: clause, args: args}
+func WithWhere[T any](clause string, args ...any) Option[T] {
+	return whereOption[T]{clause: clause, args: args}
+}
+
+// --- Eager Loading Options ---
+
+// RelatedFetcher is a function type that fetches related entities for a given set of parent keys.
+// K is the key type (e.g., int64, string).
+// RelatedT is the type of the related entity.
+type RelatedFetcher[K comparable, RelatedT any] func(ctx context.Context, keys []K) ([]RelatedT, error)
+
+// relationOption is a generic Option for eager loading.
+type relationOption[T any] struct {
+	relation Relation[T]
+}
+
+// apply adds the relation to the queryBuilder.
+func (o relationOption[T]) apply(qb *queryBuilder[T]) error {
+	qb.relations = append(qb.relations, o.relation)
+	return nil
+}
+
+// With adds a relationship to be eager-loaded.
+// The provided mapper must implement the Relation interface.
+func With[T any](mapper Relation[T]) Option[T] {
+	return relationOption[T]{relation: mapper}
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/dimatock/crud"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListWithIn(t *testing.T) {
@@ -13,9 +15,7 @@ func TestListWithIn(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -25,14 +25,9 @@ func TestListWithIn(t *testing.T) {
 	_, _ = repo.Create(ctx, User{Username: "user3", Email: "u3@example.com"})
 
 	// Test WithIn
-	users, err := repo.List(ctx, crud.WithIn("username", "user1", "user3"))
-	if err != nil {
-		t.Fatalf("List with WithIn failed: %v", err)
-	}
-
-	if len(users) != 2 {
-		t.Fatalf("Expected 2 users, got %d", len(users))
-	}
+	users, err := repo.List(ctx, crud.WithIn[User]("username", "user1", "user3"))
+	require.NoError(t, err)
+	require.Len(t, users, 2)
 
 	// Check that we got the correct users
 	foundUser1 := false
@@ -46,9 +41,8 @@ func TestListWithIn(t *testing.T) {
 		}
 	}
 
-	if !foundUser1 || !foundUser3 {
-		t.Errorf("Did not retrieve the correct users with WithIn")
-	}
+	assert.True(t, foundUser1, "Did not retrieve user1")
+	assert.True(t, foundUser3, "Did not retrieve user3")
 }
 
 func TestListWithIn_Empty(t *testing.T) {
@@ -56,22 +50,14 @@ func TestListWithIn_Empty(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Test WithIn with no values
-	_, err = repo.List(ctx, crud.WithIn("username"))
-	if err == nil {
-		t.Fatal("Expected an error when calling WithIn with no values, but got nil")
-	}
-
-	expectedError := "WithIn option requires at least one value for column 'username'"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
+	_, err = repo.List(ctx, crud.WithIn[User]("username"))
+	require.Error(t, err)
+	assert.Equal(t, "WithIn option requires at least one value for column 'username'", err.Error())
 }
 
 func TestListWithLike(t *testing.T) {
@@ -79,9 +65,7 @@ func TestListWithLike(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -91,14 +75,9 @@ func TestListWithLike(t *testing.T) {
 	_, _ = repo.Create(ctx, User{Username: "another-user", Email: "u3@example.com"})
 
 	// Test WithLike
-	users, err := repo.List(ctx, crud.WithLike("username", "test-user-%"))
-	if err != nil {
-		t.Fatalf("List with WithLike failed: %v", err)
-	}
-
-	if len(users) != 2 {
-		t.Fatalf("Expected 2 users, got %d", len(users))
-	}
+	users, err := repo.List(ctx, crud.WithLike[User]("username", "test-user-%"))
+	require.NoError(t, err)
+	require.Len(t, users, 2)
 }
 
 func TestListWithOperator(t *testing.T) {
@@ -106,9 +85,7 @@ func TestListWithOperator(t *testing.T) {
 	defer db.Close()
 
 	repo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -118,22 +95,12 @@ func TestListWithOperator(t *testing.T) {
 	_, _ = repo.Create(ctx, User{Username: "user3", Email: "u3@example.com"})
 
 	// Test WithOperator (e.g., >)
-	users, err := repo.List(ctx, crud.WithOperator("id", ">", u1.ID))
-	if err != nil {
-		t.Fatalf("List with WithOperator failed: %v", err)
-	}
-
-	if len(users) != 2 {
-		t.Fatalf("Expected 2 users with ID > %d, got %d", u1.ID, len(users))
-	}
+	users, err := repo.List(ctx, crud.WithOperator[User]("id", ">", u1.ID))
+	require.NoError(t, err)
+	require.Len(t, users, 2)
 
 	// Test WithOperator (e.g., !=)
-	users, err = repo.List(ctx, crud.WithOperator("username", "!=", "user2"))
-	if err != nil {
-		t.Fatalf("List with WithOperator failed: %v", err)
-	}
-
-	if len(users) != 2 {
-		t.Fatalf("Expected 2 users, got %d", len(users))
-	}
+	users, err = repo.List(ctx, crud.WithOperator[User]("username", "!=", "user2"))
+	require.NoError(t, err)
+	require.Len(t, users, 2)
 }

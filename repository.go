@@ -1,5 +1,3 @@
-// Package crud provides a generic CRUD (Create, Read, Update, Delete)
-// repository for Go structs.
 package crud
 
 import (
@@ -205,8 +203,8 @@ func (r *Repository[T]) CreateOrUpdate(ctx context.Context, item T) (T, error) {
 
 // GetByID retrieves a single record from the database by its primary key.
 // It returns sql.ErrNoRows if no record is found.
-func (r *Repository[T]) GetByID(ctx context.Context, id any, opts ...Option) (T, error) {
-	qb := &queryBuilder{
+func (r *Repository[T]) GetByID(ctx context.Context, id any, opts ...Option[T]) (T, error) {
+	qb := &queryBuilder[T]{
 		dialect: r.dialect,
 	}
 	// Apply provided options (e.g., WithLock)
@@ -226,7 +224,22 @@ func (r *Repository[T]) GetByID(ctx context.Context, id any, opts ...Option) (T,
 	)
 
 	row := r.getExecutor().QueryRowContext(ctx, sql, qb.args...)
-	return r.scanRow(row)
+	item, err := r.scanRow(row)
+	if err != nil {
+		return item, err
+	}
+
+	// Handle eager loading if there are relations
+	if len(qb.relations) > 0 {
+		// We need a slice of pointers to pass to handleRelations
+		items := []*T{&item}
+		if err := r.handleRelations(ctx, qb, items); err != nil {
+			return item, err
+		}
+		return *items[0], nil
+	}
+
+	return item, nil
 }
 
 // Update modifies an existing record in the database based on the provided item.
@@ -305,8 +318,8 @@ func (r *Repository[T]) Delete(ctx context.Context, id any) error {
 }
 
 // List retrieves a slice of records based on the provided options.
-func (r *Repository[T]) List(ctx context.Context, opts ...Option) ([]T, error) {
-	qb := &queryBuilder{
+func (r *Repository[T]) List(ctx context.Context, opts ...Option[T]) ([]T, error) {
+	qb := &queryBuilder[T]{
 		dialect: r.dialect,
 	}
 	for _, opt := range opts {
@@ -347,5 +360,56 @@ func (r *Repository[T]) List(ctx context.Context, opts ...Option) ([]T, error) {
 		results = append(results, instance)
 	}
 
-	return results, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Handle eager loading if there are relations
+	if len(qb.relations) > 0 {
+		// We need a slice of pointers to pass to handleRelations
+		parentPtrs := make([]*T, len(results))
+		for i := range results {
+			parentPtrs[i] = &results[i]
+		}
+		if err := r.handleRelations(ctx, qb, parentPtrs); err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+}
+
+// handleRelations processes the eager loading for the fetched parent entities.
+func (r *Repository[T]) handleRelations(ctx context.Context, qb *queryBuilder[T], parents []*T) error {
+	if len(parents) == 0 {
+		return nil
+	}
+
+	for _, rel := range qb.relations {
+		if err := rel.Process(ctx, parents); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// scanRow scans a single row from *sql.Row or *sql.Rows.
+func (r *Repository[T]) scanRow(scannable interface{ Scan(...any) error }) (T, error) {
+	var instance T
+	val := reflect.ValueOf(&instance).Elem()
+	scanDest := make([]any, len(r.columns))
+
+	for i, colName := range r.columns {
+		fieldIndex, ok := r.scanMap[colName]
+		if !ok {
+			return instance, fmt.Errorf("column '%s' not found in scan map for type %T", colName, instance)
+		}
+		scanDest[i] = val.Field(fieldIndex).Addr().Interface()
+	}
+
+	if err := scannable.Scan(scanDest...); err != nil {
+		return instance, err
+	}
+
+	return instance, nil
 }

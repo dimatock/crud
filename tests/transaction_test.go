@@ -7,6 +7,8 @@ import (
 
 	"github.com/dimatock/crud"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTransactionRollback(t *testing.T) {
@@ -15,15 +17,11 @@ func TestTransactionRollback(t *testing.T) {
 
 	// Non-transactional repo for verification
 	baseRepo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create base repository: %v", err)
-	}
+	require.NoError(t, err, "Failed to create base repository")
 
 	ctx := context.Background()
 	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("Failed to begin transaction: %v", err)
-	}
+	require.NoError(t, err, "Failed to begin transaction")
 
 	// Create a transactional repo
 	txRepo := baseRepo.WithTx(tx)
@@ -31,26 +29,18 @@ func TestTransactionRollback(t *testing.T) {
 	// Create a user within the transaction
 	newUser := User{Username: "tx-user", Email: "tx@example.com"}
 	createdUser, err := txRepo.Create(ctx, newUser)
-	if err != nil {
-		t.Fatalf("Create within transaction failed: %v", err)
-	}
+	require.NoError(t, err, "Create within transaction failed")
 
 	// The user should exist within the transaction
 	_, err = txRepo.GetByID(ctx, createdUser.ID)
-	if err != nil {
-		t.Fatalf("GetByID within transaction failed: %v", err)
-	}
+	require.NoError(t, err, "GetByID within transaction failed")
 
 	// Rollback the transaction
-	if err := tx.Rollback(); err != nil {
-		t.Fatalf("Failed to rollback transaction: %v", err)
-	}
+	require.NoError(t, tx.Rollback(), "Failed to rollback transaction")
 
 	// The user should NOT exist outside the transaction
 	_, err = baseRepo.GetByID(ctx, createdUser.ID)
-	if err != sql.ErrNoRows {
-		t.Errorf("Expected sql.ErrNoRows after rollback, but got %v", err)
-	}
+	assert.ErrorIs(t, err, sql.ErrNoRows, "Expected sql.ErrNoRows after rollback")
 }
 
 func TestTransactionCommit(t *testing.T) {
@@ -58,15 +48,11 @@ func TestTransactionCommit(t *testing.T) {
 	defer db.Close()
 
 	baseRepo, err := crud.NewRepository[User](db, "users", crud.SQLiteDialect{})
-	if err != nil {
-		t.Fatalf("Failed to create base repository: %v", err)
-	}
+	require.NoError(t, err, "Failed to create base repository")
 
 	ctx := context.Background()
 	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("Failed to begin transaction: %v", err)
-	}
+	require.NoError(t, err, "Failed to begin transaction")
 
 	// Create a transactional repo
 	txRepo := baseRepo.WithTx(tx)
@@ -74,22 +60,14 @@ func TestTransactionCommit(t *testing.T) {
 	// Create a user within the transaction
 	newUser := User{Username: "commit-user", Email: "commit@example.com"}
 	createdUser, err := txRepo.Create(ctx, newUser)
-	if err != nil {
-		t.Fatalf("Create within transaction failed: %v", err)
-	}
+	require.NoError(t, err, "Create within transaction failed")
 
 	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("Failed to commit transaction: %v", err)
-	}
+	require.NoError(t, tx.Commit(), "Failed to commit transaction")
 
 	// The user SHOULD exist outside the transaction
 	retrievedUser, err := baseRepo.GetByID(ctx, createdUser.ID)
-	if err != nil {
-		t.Errorf("Expected to find user after commit, but got error %v", err)
-	}
+	require.NoError(t, err, "Expected to find user after commit")
 
-	if retrievedUser.Username != newUser.Username {
-		t.Errorf("Username mismatch after commit: got %s, want %s", retrievedUser.Username, newUser.Username)
-	}
+	assert.Equal(t, newUser.Username, retrievedUser.Username, "Username mismatch after commit")
 }

@@ -1,31 +1,11 @@
 package crud
 
-import (
-	"reflect"
-)
-
-// scannable represents an object that can be scanned, like *sql.Row or *sql.Rows.
-type scannable interface {
-	Scan(dest ...any) error
-}
-
-// scanRow scans a single row from the database into a new instance of T.
-func (r *Repository[T]) scanRow(s scannable) (T, error) {
-	var instance T
-	destVal := reflect.ValueOf(&instance).Elem()
-	scanDest := make([]any, len(r.columns))
-
-	for i, col := range r.columns {
-		if fieldIndex, ok := r.scanMap[col]; ok {
-			scanDest[i] = destVal.Field(fieldIndex).Addr().Interface()
-		} else {
-			var dummyDest any
-			scanDest[i] = &dummyDest
-		}
+// IntsToAnys converts a slice of any integer type to a slice of any.
+// This is a helper function for the WithIn option when using integer keys for relations.
+func IntsToAnys[T ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64](s []T) []any {
+	ans := make([]any, len(s))
+	for i, v := range s {
+		ans[i] = v
 	}
-
-	if err := s.Scan(scanDest...); err != nil {
-		return instance, err
-	}
-	return instance, nil
+	return ans
 }
