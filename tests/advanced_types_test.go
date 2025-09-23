@@ -41,7 +41,7 @@ func TestUUIDPrimaryKey(t *testing.T) {
 	assert.Equal(t, newID, fetched.ID)
 
 	// Test List with filter
-	items, err := repo.List(context.Background(), crud.WithFilter[UUIDModel]("id", newID))
+	items, err := repo.List(context.Background(), repo.Where("id", newID))
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	assert.Equal(t, newID, items[0].ID)

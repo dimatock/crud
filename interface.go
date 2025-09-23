@@ -27,4 +27,19 @@ type RepositoryInterface[T any] interface {
 
 	// Delete removes a record from the database by its primary key.
 	Delete(ctx context.Context, id any) error
+
+	// =========================================================================
+	// Query Option Methods
+	// =========================================================================
+
+	Where(args ...any) Option[T]
+	OrderBy(column string, direction SortDirection) Option[T]
+	Limit(limit int) Option[T]
+	Offset(offset int) Option[T]
+	Join(joinClause string) Option[T]
+	Lock(clause string) Option[T]
+	WhereIn(column string, values ...any) Option[T]
+	WhereLike(column string, value any) Option[T]
+	WhereSubquery(column, operator, subquery string, args ...any) Option[T]
+	WithRelation(mapper Relation[T]) Option[T]
 }

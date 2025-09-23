@@ -52,7 +52,7 @@ func TestListWithJoin(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing users with a join to posts
-	users, err := userRepo.List(ctx, crud.WithJoin[User]("INNER JOIN posts ON posts.user_id = users.id"), crud.WithFilter[User]("posts.title", "Post 1"))
+	users, err := userRepo.List(ctx, userRepo.Join("INNER JOIN posts ON posts.user_id = users.id"), userRepo.Where("posts.title", "Post 1"))
 	require.NoError(t, err)
 
 	require.Len(t, users, 1)
@@ -80,7 +80,7 @@ func TestListWithSubquery(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing users with a subquery
-	users, err := userRepo.List(ctx, crud.WithSubquery[User]("id", "IN", "SELECT user_id FROM posts WHERE title = ?", "Post 1"))
+	users, err := userRepo.List(ctx, userRepo.WhereSubquery("id", "IN", "SELECT user_id FROM posts WHERE title = ?", "Post 1"))
 	require.NoError(t, err)
 
 	require.Len(t, users, 1)

@@ -31,7 +31,7 @@ func TestListUsers(t *testing.T) {
 	assert.Len(t, users, 2)
 }
 
-func TestListWithFilter(t *testing.T) {
+func TestListWithWhereMethod(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
@@ -47,14 +47,14 @@ func TestListWithFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing with a filter
-	users, err := repo.List(ctx, crud.WithFilter[User]("username", "user1"))
+	users, err := repo.List(ctx, repo.Where("username", "user1"))
 	require.NoError(t, err)
 
 	require.Len(t, users, 1)
 	assert.Equal(t, "user1", users[0].Username)
 }
 
-func TestListWithWhere(t *testing.T) {
+func TestListWithRawWhere(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
@@ -72,7 +72,7 @@ func TestListWithWhere(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing with a WHERE clause (OR condition)
-	users, err := repo.List(ctx, crud.WithWhere[User]("username = ? OR username = ?", "user1", "user3"))
+	users, err := repo.List(ctx, repo.Where("username = ? OR username = ?", "user1", "user3"))
 	require.NoError(t, err)
 	assert.Len(t, users, 2)
 }
@@ -93,7 +93,7 @@ func TestListWithSort(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing with sort
-	users, err := repo.List(ctx, crud.WithSort[User]("username", crud.SortAsc))
+	users, err := repo.List(ctx, repo.OrderBy("username", crud.SortAsc))
 	require.NoError(t, err)
 
 	require.Len(t, users, 2)
@@ -119,7 +119,7 @@ func TestListWithLimitAndOffset(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test listing with limit and offset
-	users, err := repo.List(ctx, crud.WithLimit[User](1), crud.WithOffset[User](1), crud.WithSort[User]("username", crud.SortAsc))
+	users, err := repo.List(ctx, repo.Limit(1), repo.Offset(1), repo.OrderBy("username", crud.SortAsc))
 	require.NoError(t, err)
 
 	require.Len(t, users, 1)

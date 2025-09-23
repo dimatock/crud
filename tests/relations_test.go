@@ -71,14 +71,14 @@ func TestEagerLoading(t *testing.T) {
 	t.Run("WithOneToMany", func(t *testing.T) {
 		mapper := crud.OneToManyMapper[RelUser, RelPost, int]{
 			Fetcher: func(ctx context.Context, userIDs []int) ([]RelPost, error) {
-				return postRepo.List(ctx, crud.WithIn[RelPost]("user_id", crud.IntsToAnys(userIDs)...))
+				return postRepo.List(ctx, postRepo.WhereIn("user_id", crud.IntsToAnys(userIDs)...))
 			},
 			GetPK:      func(u *RelUser) int { return u.ID },
 			GetFK:      func(p *RelPost) int { return p.UserID },
 			SetRelated: func(u *RelUser, p []*RelPost) { u.Posts = p },
 		}
 
-		users, err := userRepo.List(context.Background(), crud.With[RelUser](mapper))
+		users, err := userRepo.List(context.Background(), userRepo.WithRelation(mapper))
 		require.NoError(t, err)
 		require.Len(t, users, 2)
 
@@ -99,14 +99,14 @@ func TestEagerLoading(t *testing.T) {
 	t.Run("WithManyToOne", func(t *testing.T) {
 		mapper := crud.ManyToOneMapper[RelPost, RelUser, int]{
 			Fetcher: func(ctx context.Context, userIDs []int) ([]RelUser, error) {
-				return userRepo.List(ctx, crud.WithIn[RelUser]("id", crud.IntsToAnys(userIDs)...))
+				return userRepo.List(ctx, userRepo.WhereIn("id", crud.IntsToAnys(userIDs)...))
 			},
 			GetFK:      func(p *RelPost) int { return p.UserID },
 			GetPK:      func(u *RelUser) int { return u.ID },
 			SetRelated: func(p *RelPost, u *RelUser) { p.User = u },
 		}
 
-		posts, err := postRepo.List(context.Background(), crud.With[RelPost](mapper))
+		posts, err := postRepo.List(context.Background(), postRepo.WithRelation(mapper))
 		require.NoError(t, err)
 		require.Len(t, posts, 3)
 
@@ -120,14 +120,14 @@ func TestEagerLoading(t *testing.T) {
 	t.Run("WithHasOne", func(t *testing.T) {
 		mapper := crud.HasOneMapper[RelUser, RelProfile, int]{
 			Fetcher: func(ctx context.Context, userIDs []int) ([]RelProfile, error) {
-				return profileRepo.List(ctx, crud.WithIn[RelProfile]("user_id", crud.IntsToAnys(userIDs)...))
+				return profileRepo.List(ctx, profileRepo.WhereIn("user_id", crud.IntsToAnys(userIDs)...))
 			},
 			GetPK:      func(u *RelUser) int { return u.ID },
 			GetFK:      func(p *RelProfile) int { return p.UserID },
 			SetRelated: func(u *RelUser, p *RelProfile) { u.Profile = p },
 		}
 
-		users, err := userRepo.List(context.Background(), crud.With[RelUser](mapper))
+		users, err := userRepo.List(context.Background(), userRepo.WithRelation(mapper))
 		require.NoError(t, err)
 		require.Len(t, users, 2)
 

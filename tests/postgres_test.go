@@ -80,7 +80,7 @@ func TestPostgresGetByIDWithLock(t *testing.T) {
 
 	txRepo := repo.WithTx(tx)
 
-	retrievedUser, err := txRepo.GetByID(ctx, createdUser.ID, crud.WithLock[User]("FOR UPDATE"))
+	retrievedUser, err := txRepo.GetByID(ctx, createdUser.ID, txRepo.Lock("FOR UPDATE"))
 	require.NoError(t, err)
 
 	assert.Equal(t, createdUser.Username, retrievedUser.Username)

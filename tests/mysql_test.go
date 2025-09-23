@@ -138,7 +138,7 @@ func TestMySQLListWithOptions(t *testing.T) {
 	_, err = repo.Create(ctx, User{Username: "user3", Email: "user3@example.com"})
 	require.NoError(t, err)
 
-	users, err := repo.List(ctx, crud.WithSort[User]("username", crud.SortAsc), crud.WithLimit[User](1), crud.WithOffset[User](1))
+	users, err := repo.List(ctx, repo.OrderBy("username", crud.SortAsc), repo.Limit(1), repo.Offset(1))
 	require.NoError(t, err)
 
 	require.Len(t, users, 1)
@@ -163,7 +163,7 @@ func TestMySQLGetByIDWithLock(t *testing.T) {
 
 	txRepo := repo.WithTx(tx)
 
-	retrievedUser, err := txRepo.GetByID(ctx, createdUser.ID, crud.WithLock[User]("FOR UPDATE"))
+	retrievedUser, err := txRepo.GetByID(ctx, createdUser.ID, txRepo.Lock("FOR UPDATE"))
 	require.NoError(t, err)
 
 	assert.Equal(t, createdUser.Username, retrievedUser.Username)

@@ -25,7 +25,7 @@ func TestListWithIn(t *testing.T) {
 	_, _ = repo.Create(ctx, User{Username: "user3", Email: "u3@example.com"})
 
 	// Test WithIn
-	users, err := repo.List(ctx, crud.WithIn[User]("username", "user1", "user3"))
+	users, err := repo.List(ctx, repo.WhereIn("username", "user1", "user3"))
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 
@@ -55,9 +55,9 @@ func TestListWithIn_Empty(t *testing.T) {
 	ctx := context.Background()
 
 	// Test WithIn with no values
-	_, err = repo.List(ctx, crud.WithIn[User]("username"))
+	_, err = repo.List(ctx, repo.WhereIn("username"))
 	require.Error(t, err)
-	assert.Equal(t, "WithIn option requires at least one value for column 'username'", err.Error())
+	assert.Equal(t, "WhereIn option requires at least one value for column 'username'", err.Error())
 }
 
 func TestListWithLike(t *testing.T) {
@@ -75,12 +75,12 @@ func TestListWithLike(t *testing.T) {
 	_, _ = repo.Create(ctx, User{Username: "another-user", Email: "u3@example.com"})
 
 	// Test WithLike
-	users, err := repo.List(ctx, crud.WithLike[User]("username", "test-user-%"))
+	users, err := repo.List(ctx, repo.WhereLike("username", "test-user-%"))
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 }
 
-func TestListWithOperator(t *testing.T) {
+func TestListWithOperatorWhere(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
@@ -95,12 +95,12 @@ func TestListWithOperator(t *testing.T) {
 	_, _ = repo.Create(ctx, User{Username: "user3", Email: "u3@example.com"})
 
 	// Test WithOperator (e.g., >)
-	users, err := repo.List(ctx, crud.WithOperator[User]("id", ">", u1.ID))
+	users, err := repo.List(ctx, repo.Where("id", ">", u1.ID))
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 
 	// Test WithOperator (e.g., !=)
-	users, err = repo.List(ctx, crud.WithOperator[User]("username", "!=", "user2"))
+	users, err = repo.List(ctx, repo.Where("username", "!=", "user2"))
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 }

@@ -28,7 +28,7 @@ func TestCreateOrUpdate_SQLite(t *testing.T) {
 	assert.Equal(t, userToCreate.Username, createdUser.Username)
 
 	// Verify count is 1
-	users, err := repo.List(ctx, crud.WithFilter[User]("id", 1))
+	users, err := repo.List(ctx, repo.Where("id", 1))
 	require.NoError(t, err)
 	require.Len(t, users, 1)
 
@@ -40,7 +40,7 @@ func TestCreateOrUpdate_SQLite(t *testing.T) {
 	assert.Equal(t, userToUpdate.Username, updatedUser.Username)
 
 	// Verify count is still 1
-	users, err = repo.List(ctx, crud.WithFilter[User]("id", 1))
+	users, err = repo.List(ctx, repo.Where("id", 1))
 	require.NoError(t, err)
 	require.Len(t, users, 1)
 
@@ -74,7 +74,7 @@ func TestCreateOrUpdate_MySQL(t *testing.T) {
 	assert.Equal(t, userToUpdate.Username, updatedUser.Username)
 
 	// Verify count is still 1
-	users, err := repo.List(ctx, crud.WithFilter[User]("id", 1))
+	users, err := repo.List(ctx, repo.Where("id", 1))
 	require.NoError(t, err)
 	assert.Len(t, users, 1)
 }

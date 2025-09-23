@@ -13,7 +13,7 @@ simplifies database interactions by abstracting away repetitive SQL code.
 - **Flexible Primary Keys:** Supports both auto-incrementing integers and user-provided keys (e.g., UUIDs).
 - **Upsert Operation:** Provides a `CreateOrUpdate` method for `INSERT ... ON CONFLICT` semantics.
 - **ACID Transactions:** All operations can be performed within a database transaction for data consistency.
-- **Pessimistic Locking:** Supports `FOR UPDATE` and other row-locking clauses via a `WithLock` option.
+- **Pessimistic Locking:** Supports `FOR UPDATE` and other row-locking clauses via a `Lock` option.
 - **Simple Mapping:** Uses struct field tags (`db:"..."`) to map to table columns.
 - **SQL Dialect Support:** Easily extensible for different databases (built-in support for MySQL, SQLite, and PostgreSQL).
 - **Flexible Queries:** Allows building complex queries using options (filtering, sorting, pagination, joins).
@@ -116,33 +116,34 @@ err = userRepo.Delete(ctx, 1)
 
 // List with basic options
 users, err := userRepo.List(ctx,
-    crud.WithFilter[User]("username", "johndoe"),
-    crud.WithSort[User]("id", crud.SortDesc),
+    userRepo.Where("username", "johndoe"),
+    userRepo.OrderBy("id", crud.SortDesc),
 )
 ```
 
 #### Advanced Filtering
 
-Combine multiple options to build complex queries.
+The `Where` method is flexible and can be used for simple equality, complex comparisons, or even raw SQL clauses.
 
 ```go
-// Find all users named "user1" or "user3"
-users, err := userRepo.List(ctx,
-    crud.WithIn[User]("username", "user1", "user3"),
-)
+// Simple equality
+users, err := userRepo.List(ctx, userRepo.Where("id", 5))
 
-// Find all products whose names start with "Awesome"
-products, err := productRepo.List(ctx,
-    crud.WithLike[Product]("name", "Awesome%"),
-)
+// Operator
+users, err = userRepo.List(ctx, userRepo.Where("id", ">", 5))
 
-// Find all users with an ID greater than 5
-users, err = userRepo.List(ctx,
-    crud.WithOperator[User]("id", ">", 5),
-)
+// Raw SQL clause with automatic placeholder conversion
+// (you always use '?', and the library converts it to the correct dialect)
+users, err = userRepo.List(ctx, userRepo.Where("username = ? OR email = ?", "user1", "user1@example.com"))
+
+// IN clause
+users, err = userRepo.List(ctx, userRepo.WhereIn("username", "user1", "user3"))
+
+// LIKE clause
+products, err := productRepo.List(ctx, productRepo.WhereLike("name", "Awesome%"))
 ```
 
-## Eager Loading with `With()`
+## Eager Loading with `WithRelation()`
 
 The library supports type-safe eager loading of relationships to prevent N+1 query problems. This is achieved by passing a `mapper` object that implements the `crud.Relation[T]` interface to the `crud.With()` option.
 
@@ -179,7 +180,7 @@ userRepo, _ := crud.NewRepository[User](db, "users", dialect)
 mapper := crud.ManyToOneMapper[Post, User, int]{
 	Fetcher: func(ctx context.Context, userIDs []int) ([]User, error) {
 		// Use the userRepo to fetch all users by their IDs in a single query
-		return userRepo.List(ctx, crud.WithIn[User]("id", crud.IntsToAnys(userIDs)...))
+		return userRepo.List(ctx, userRepo.WhereIn("id", crud.IntsToAnys(userIDs)...))
 	},
 	GetFK:      func(p *Post) int { return p.UserID }, // Get the foreign key from the Post
 	GetPK:      func(u *User) int { return u.ID },     // Get the primary key from the User
@@ -187,7 +188,7 @@ mapper := crud.ManyToOneMapper[Post, User, int]{
 }
 
 // 4. Execute the query
-posts, err := postRepo.List(ctx, crud.With[Post](mapper))
+posts, err := postRepo.List(ctx, postRepo.WithRelation(mapper))
 
 // The `posts` slice will now have the `User` field populated for each post.
 ```
@@ -217,7 +218,7 @@ type Post struct {
 // 3. Define the mapper
 mapper := crud.OneToManyMapper[User, Post, int]{
 	Fetcher: func(ctx context.Context, userIDs []int) ([]Post, error) {
-		return postRepo.List(ctx, crud.WithIn[Post]("user_id", crud.IntsToAnys(userIDs)...))
+		return postRepo.List(ctx, postRepo.WhereIn("user_id", crud.IntsToAnys(userIDs)...))
 	},
 	GetPK:      func(u *User) int { return u.ID },         // Get the primary key from the User
 	GetFK:      func(p *Post) int { return p.UserID },     // Get the foreign key from the Post
@@ -225,7 +226,7 @@ mapper := crud.OneToManyMapper[User, Post, int]{
 }
 
 // 4. Execute the query
-users, err := userRepo.List(ctx, crud.With[User](mapper))
+users, err := userRepo.List(ctx, userRepo.WithRelation(mapper))
 
 // The `users` slice will now have the `Posts` field populated for each user.
 ```
@@ -255,7 +256,7 @@ type Profile struct {
 // 3. Define the mapper
 mapper := crud.HasOneMapper[User, Profile, int]{
 	Fetcher: func(ctx context.Context, userIDs []int) ([]Profile, error) {
-		return profileRepo.List(ctx, crud.WithIn[Profile]("user_id", crud.IntsToAnys(userIDs)...))
+		return profileRepo.List(ctx, profileRepo.WhereIn("user_id", crud.IntsToAnys(userIDs)...))
 	},
 	GetPK:      func(u *User) int { return u.ID },           // Get the primary key from the User
 	GetFK:      func(p *Profile) int { return p.UserID },     // Get the foreign key from the Profile
@@ -263,7 +264,7 @@ mapper := crud.HasOneMapper[User, Profile, int]{
 }
 
 // 4. Execute the query
-users, err := userRepo.List(ctx, crud.With[User](mapper))
+users, err := userRepo.List(ctx, userRepo.WithRelation(mapper))
 
 // The `users` slice will now have the `Profile` field populated where it exists.
 ```
@@ -276,8 +277,8 @@ You can load multiple relationships in a single query by passing multiple `With(
 // Assume userToPostsMapper and userToProfileMapper are defined
 
 user, err := userRepo.GetByID(ctx, 1,
-    crud.With[User](userToPostsMapper),
-    crud.With[User](userToProfileMapper),
+    userRepo.WithRelation(userToPostsMapper),
+    userRepo.WithRelation(userToProfileMapper),
 )
 
 // The returned user will have both Posts and Profile populated.
@@ -313,14 +314,14 @@ err = tx.Commit()
 
 To prevent race conditions during read-modify-write cycles, you can apply a pessimistic lock (e.g., `FOR UPDATE`) to your `GetByID` or `List` calls. This feature **must be used within a transaction**.
 
-The `WithLock` option accepts a raw string, allowing you to use dialect-specific clauses like `FOR UPDATE SKIP LOCKED`.
+The `Lock` option accepts a raw string, allowing you to use dialect-specific clauses like `FOR UPDATE SKIP LOCKED`.
 
 ```go
 // Assume txRepo is a repository created with WithTx(tx)
 
 // 1. Select a user and lock the row
 // The query will be SELECT ... FROM users WHERE id = ? FOR UPDATE
-user, err := txRepo.GetByID(ctx, 1, crud.WithLock[User]("FOR UPDATE"))
+user, err := txRepo.GetByID(ctx, 1, txRepo.Lock("FOR UPDATE"))
 if err != nil {
     tx.Rollback()
     // ... handle error
@@ -382,8 +383,8 @@ func (r *userRepository) GetByEmail(
 ) (User, error) {
     // Use the List method from the embedded repository with a filter
     users, err := r.List(ctx,
-        crud.WithFilter[User]("email", email),
-        crud.WithLimit[User](1),
+        r.Where("email", email),
+        r.Limit(1),
     )
     if err != nil {
         return User{}, err

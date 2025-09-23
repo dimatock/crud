@@ -50,6 +50,46 @@ func (r *Repository[T]) WithTx(tx *sql.Tx) RepositoryInterface[T] {
 	return &repoCopy
 }
 
+func (r *Repository[T]) Where(args ...any) Option[T] {
+	return Where[T](args...)
+}
+
+func (r *Repository[T]) OrderBy(column string, direction SortDirection) Option[T] {
+	return OrderBy[T](column, direction)
+}
+
+func (r *Repository[T]) Limit(limit int) Option[T] {
+	return Limit[T](limit)
+}
+
+func (r *Repository[T]) Offset(offset int) Option[T] {
+	return Offset[T](offset)
+}
+
+func (r *Repository[T]) Join(joinClause string) Option[T] {
+	return Join[T](joinClause)
+}
+
+func (r *Repository[T]) Lock(clause string) Option[T] {
+	return Lock[T](clause)
+}
+
+func (r *Repository[T]) WhereIn(column string, values ...any) Option[T] {
+	return WhereIn[T](column, values...)
+}
+
+func (r *Repository[T]) WhereLike(column string, value any) Option[T] {
+	return WhereLike[T](column, value)
+}
+
+func (r *Repository[T]) WhereSubquery(column, operator, subquery string, args ...any) Option[T] {
+	return WhereSubquery[T](column, operator, subquery, args...)
+}
+
+func (r *Repository[T]) WithRelation(mapper Relation[T]) Option[T] {
+	return WithRelation[T](mapper)
+}
+
 // NewRepository creates a new generic repository for the given type T.
 // It analyzes the struct T to map its fields to database columns using reflection.
 func NewRepository[T any](db *sql.DB, tableName string, dialect Dialect) (RepositoryInterface[T], error) {

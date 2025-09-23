@@ -24,39 +24,73 @@ type queryBuilder[T any] struct {
 	relations      []Relation[T] // Holds relationship loading configurations
 }
 
-// --- Filter Option ---
-type filterOption[T any] struct {
+// Where adds a WHERE clause to the query. It is a flexible method that can handle
+// different numbers of arguments to create different types of conditions:
+//   - Where(column, value) for simple equality (e.g., "username", "john") -> WHERE username = ?
+//   - Where(column, operator, value) for complex comparisons (e.g., "age", ">", 21) -> WHERE age > ?
+//   - Where(rawClause, args...) for raw SQL (e.g., "status = ? OR archived = ?", "active", false)
+func Where[T any](args ...any) Option[T] {
+	if len(args) == 0 {
+		return noOpOption[T]{}
+	}
+
+	clause, isClause := args[0].(string)
+	if !isClause {
+		// The first argument must be a string (column name or raw clause)
+		return noOpOption[T]{}
+	}
+
+	// Case 1: Raw query. Check for '?' as a heuristic.
+	if strings.Contains(clause, "?") {
+		return rawWhereOption[T]{clause: clause, args: args[1:]}
+	}
+
+	// Case 2: Operator query (col, op, val)
+	if len(args) == 3 {
+		if operator, ok := args[1].(string); ok {
+			return operatorWhereOption[T]{column: clause, operator: operator, value: args[2]}
+		}
+	}
+
+	// Case 3: Simple equality (col, val)
+	if len(args) == 2 {
+		return simpleWhereOption[T]{column: clause, value: args[1]}
+	}
+
+	// If none of the above, it's an invalid combination
+	return noOpOption[T]{}
+}
+
+// noOpOption is an option that does nothing. Used as a fallback for invalid Where args.
+type noOpOption[T any] struct{}
+
+func (o noOpOption[T]) apply(_ *queryBuilder[T]) error {
+	return nil
+}
+
+// --- Simple Where Option (column = value) ---
+type simpleWhereOption[T any] struct {
 	column string
 	value  any
 }
 
-func (o filterOption[T]) apply(qb *queryBuilder[T]) error {
+func (o simpleWhereOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, fmt.Sprintf("%s = %s", o.column, qb.dialect.Placeholder(len(qb.args)+1)))
 	qb.args = append(qb.args, o.value)
 	return nil
 }
 
-// WithFilter adds a simple WHERE clause to the query (e.g., WHERE column = value).
-func WithFilter[T any](column string, value any) Option[T] {
-	return filterOption[T]{column: column, value: value}
-}
-
-// --- Operator Option ---
-type operatorOption[T any] struct {
+// --- Operator Where Option (column op value) ---
+type operatorWhereOption[T any] struct {
 	column   string
 	operator string
 	value    any
 }
 
-func (o operatorOption[T]) apply(qb *queryBuilder[T]) error {
+func (o operatorWhereOption[T]) apply(qb *queryBuilder[T]) error {
 	qb.whereClauses = append(qb.whereClauses, fmt.Sprintf("%s %s %s", o.column, o.operator, qb.dialect.Placeholder(len(qb.args)+1)))
 	qb.args = append(qb.args, o.value)
 	return nil
-}
-
-// WithOperator adds a WHERE clause with a custom operator (e.g., WHERE column > value).
-func WithOperator[T any](column, operator string, value any) Option[T] {
-	return operatorOption[T]{column: column, operator: operator, value: value}
 }
 
 // --- In Option ---
@@ -67,7 +101,7 @@ type inOption[T any] struct {
 
 func (o inOption[T]) apply(qb *queryBuilder[T]) error {
 	if len(o.values) == 0 {
-		return fmt.Errorf("WithIn option requires at least one value for column '%s'", o.column)
+		return fmt.Errorf("WhereIn option requires at least one value for column '%s'", o.column)
 	}
 	placeholders := make([]string, len(o.values))
 	for i := range o.values {
@@ -78,8 +112,8 @@ func (o inOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithIn adds a WHERE IN clause to the query.
-func WithIn[T any](column string, values ...any) Option[T] {
+// WhereIn adds a WHERE IN clause to the query.
+func WhereIn[T any](column string, values ...any) Option[T] {
 	return inOption[T]{column: column, values: values}
 }
 
@@ -95,8 +129,8 @@ func (o likeOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithLike adds a WHERE LIKE clause to the query.
-func WithLike[T any](column string, value any) Option[T] {
+// WhereLike adds a WHERE LIKE clause to the query.
+func WhereLike[T any](column string, value any) Option[T] {
 	return likeOption[T]{column: column, value: value}
 }
 
@@ -110,9 +144,9 @@ func (o lockOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithLock adds a row-locking clause to the query (e.g., "FOR UPDATE").
+// Lock adds a row-locking clause to the query (e.g., "FOR UPDATE").
 // This should only be used within a transaction.
-func WithLock[T any](clause string) Option[T] {
+func Lock[T any](clause string) Option[T] {
 	return lockOption[T]{clause: clause}
 }
 
@@ -127,8 +161,8 @@ func (o sortOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithSort adds an ORDER BY clause to the query.
-func WithSort[T any](column string, direction SortDirection) Option[T] {
+// OrderBy adds an ORDER BY clause to the query.
+func OrderBy[T any](column string, direction SortDirection) Option[T] {
 	return sortOption[T]{column: column, direction: direction}
 }
 
@@ -142,8 +176,8 @@ func (o limitOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithLimit adds a LIMIT clause to the query.
-func WithLimit[T any](limit int) Option[T] {
+// Limit adds a LIMIT clause to the query.
+func Limit[T any](limit int) Option[T] {
 	return limitOption[T]{limit: limit}
 }
 
@@ -157,8 +191,8 @@ func (o offsetOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithOffset adds an OFFSET clause to the query.
-func WithOffset[T any](offset int) Option[T] {
+// Offset adds an OFFSET clause to the query.
+func Offset[T any](offset int) Option[T] {
 	return offsetOption[T]{offset: offset}
 }
 
@@ -172,9 +206,9 @@ func (o joinOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithJoin adds a JOIN clause to the query (e.g., "INNER JOIN roles ON roles.id = users.role_id").
-// IMPORTANT: When using joins, ensure column names in WithFilter and WithSort are fully qualified (e.g., "users.name").
-func WithJoin[T any](joinClause string) Option[T] {
+// Join adds a JOIN clause to the query (e.g., "INNER JOIN roles ON roles.id = users.role_id").
+// IMPORTANT: When using joins, ensure column names in Where and OrderBy are fully qualified (e.g., "users.name").
+func Join[T any](joinClause string) Option[T] {
 	return joinOption[T]{joinClause: joinClause}
 }
 
@@ -192,28 +226,41 @@ func (o subqueryOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// WithSubquery adds a subquery clause (e.g., "id IN (SELECT user_id FROM ...)").
-func WithSubquery[T any](column, operator, subquery string, args ...any) Option[T] {
+// WhereSubquery adds a subquery clause (e.g., "id IN (SELECT user_id FROM ...)").
+func WhereSubquery[T any](column, operator, subquery string, args ...any) Option[T] {
 	return subqueryOption[T]{column: column, operator: operator, subquery: subquery, args: args}
 }
 
-// --- Where Option ---
-type whereOption[T any] struct {
+// --- Raw Where Option (raw sql) ---
+type rawWhereOption[T any] struct {
 	clause string
 	args   []any
 }
 
-func (o whereOption[T]) apply(qb *queryBuilder[T]) error {
-	qb.whereClauses = append(qb.whereClauses, o.clause)
+func (o rawWhereOption[T]) apply(qb *queryBuilder[T]) error {
+	// The number of arguments *before* this clause is added
+	argStartIndex := len(qb.args)
+
+	finalClause := ""
+	argCounterForThisClause := 0
+	for _, char := range o.clause {
+		if char == '?' {
+			// Use the global argument index
+			globalArgIndex := argStartIndex + argCounterForThisClause
+			finalClause += qb.dialect.Placeholder(globalArgIndex + 1) // Placeholder is 1-based
+			argCounterForThisClause++
+		} else {
+			finalClause += string(char)
+		}
+	}
+
+	if argCounterForThisClause != len(o.args) {
+		return fmt.Errorf("mismatched number of placeholders (?) and arguments in Where clause: '%s'", o.clause)
+	}
+
+	qb.whereClauses = append(qb.whereClauses, finalClause)
 	qb.args = append(qb.args, o.args...)
 	return nil
-}
-
-// WithWhere adds a raw SQL WHERE clause. The user is responsible for writing the correct SQL and providing the correct arguments.
-// The placeholders must match the dialect.
-// Example: WithWhere("name = ? OR email = ?", "John", "john@example.com")
-func WithWhere[T any](clause string, args ...any) Option[T] {
-	return whereOption[T]{clause: clause, args: args}
 }
 
 // --- Eager Loading Options ---
@@ -234,8 +281,8 @@ func (o relationOption[T]) apply(qb *queryBuilder[T]) error {
 	return nil
 }
 
-// With adds a relationship to be eager-loaded.
+// WithRelation adds a relationship to be eager-loaded.
 // The provided mapper must implement the Relation interface.
-func With[T any](mapper Relation[T]) Option[T] {
+func WithRelation[T any](mapper Relation[T]) Option[T] {
 	return relationOption[T]{relation: mapper}
 }
