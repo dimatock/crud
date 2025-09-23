@@ -170,12 +170,10 @@ func (r *Repository[T]) CreateOrUpdate(ctx context.Context, item T) (T, error) {
 	var pkValue any
 	var pkIndex int = -1
 	vals := make([]any, 0, len(r.fields))
-	cols := make([]string, 0, len(r.fields))
 
 	valOfItem := reflect.ValueOf(item)
 
 	for _, fieldInfo := range r.fields {
-		cols = append(cols, fieldInfo.columnName)
 		vals = append(vals, valOfItem.Field(fieldInfo.fieldIndex).Interface())
 		if fieldInfo.isPK {
 			pkValue = valOfItem.Field(fieldInfo.fieldIndex).Interface()

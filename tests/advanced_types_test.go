@@ -59,23 +59,3 @@ func TestUUIDPrimaryKey(t *testing.T) {
 	_, err = repo.GetByID(context.Background(), newID)
 	assert.ErrorIs(t, err, sql.ErrNoRows)
 }
-
-// Mock interface for testing transaction logic
-type mockRepoWithTx struct {
-	crud.RepositoryInterface[UUIDModel]
-	tx *sql.Tx
-}
-
-func (m *mockRepoWithTx) WithTx(tx *sql.Tx) crud.RepositoryInterface[UUIDModel] {
-	m.tx = tx
-	return m
-}
-
-func (m *mockRepoWithTx) Create(ctx context.Context, item UUIDModel) (UUIDModel, error) {
-	// In a real scenario, you would use m.tx to perform the operation
-	return item, nil
-}
-
-func (m *mockRepoWithTx) Delete(ctx context.Context, id any) error {
-	return nil
-}
